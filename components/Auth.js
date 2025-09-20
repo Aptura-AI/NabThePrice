@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useRouter } from 'next/router'
 
@@ -7,46 +7,34 @@ export default function Auth() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [message, setMessage] = useState('')
+  const [isLogin, setIsLogin] = useState(true)
   const router = useRouter()
 
-  const handleLogin = async (e) => {
+  const handleAuth = async (e) => {
     e.preventDefault()
     setLoading(true)
     setMessage('')
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    if (error) {
+    try {
+      if (isLogin) {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+        if (error) throw error
+        setMessage('Login successful! Redirecting...')
+        router.push('/admin')
+      } else {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/login`,
+        })
+        if (error) throw error
+        setMessage('Password reset instructions sent to your email!')
+      }
+    } catch (error) {
       setMessage(error.message)
-    } else {
-      setMessage('Login successful! Redirecting...')
-      // Add user to admin_users table if not exists
-      await addAdminUser()
-      router.push('/admin')
     }
     setLoading(false)
-  }
-
-  const addAdminUser = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      // Check if user already exists in admin_users
-      const { data: existingUser } = await supabase
-        .from('admin_users')
-        .select('id')
-        .eq('id', user.id)
-        .single()
-
-      if (!existingUser) {
-        // Add user to admin_users table
-        await supabase
-          .from('admin_users')
-          .insert([{ id: user.id, email: user.email }])
-      }
-    }
   }
 
   return (
@@ -54,16 +42,16 @@ export default function Auth() {
       <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Admin Login
+            {isLogin ? 'Admin Login' : 'Reset Password'}
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Sign in to access the admin panel
+            {isLogin ? 'Sign in to access the admin panel' : 'Enter your email to receive reset instructions'}
           </p>
         </div>
-        
+
         {message && (
           <div className={`p-4 rounded-md ${
-            message.includes('successful') 
+            message.includes('successful') || message.includes('sent') 
               ? 'bg-green-100 text-green-700' 
               : 'bg-red-100 text-red-700'
           }`}>
@@ -71,10 +59,10 @@ export default function Auth() {
           </div>
         )}
 
-        <form className="mt-8 space-y-6" onSubmit={handleLogin}>
+        <form className="mt-8 space-y-6" onSubmit={handleAuth}>
           <div className="space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
                 Email address
               </label>
               <input
@@ -84,25 +72,28 @@ export default function Auth() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 input-field"
+                className="input-field"
                 placeholder="Enter your email"
               />
             </div>
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 input-field"
-                placeholder="Enter your password"
-              />
-            </div>
+            
+            {isLogin && (
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                  Password
+                </label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="input-field"
+                  placeholder="Enter your password"
+                />
+              </div>
+            )}
           </div>
 
           <div>
@@ -111,7 +102,17 @@ export default function Auth() {
               disabled={loading}
               className="btn-primary w-full"
             >
-              {loading ? 'Signing in...' : 'Sign in'}
+              {loading ? 'Processing...' : (isLogin ? 'Sign in' : 'Send Reset Instructions')}
+            </button>
+          </div>
+
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={() => setIsLogin(!isLogin)}
+              className="text-blue-600 hover:text-blue-800 text-sm"
+            >
+              {isLogin ? 'Forgot your password?' : 'Back to login'}
             </button>
           </div>
         </form>
